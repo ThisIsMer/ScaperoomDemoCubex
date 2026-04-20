@@ -57,8 +57,8 @@ class GameController extends ChangeNotifier {
 
     final esImpar = portadasCount % 2 != 0;
 
-    tablero[3][0] = Habitacion(posDir: [1], explorada: true);
-    tablero[2][0] = Habitacion(posDir: [1, 4]);
+    tablero[3][0] = Habitacion(posDir: [1,2], explorada: true);
+    tablero[2][0] = Habitacion(posDir: [1, 2, 4]);
     tablero[1][0] = Habitacion(posDir: [2]);
 
     tablero[2][1] = esImpar
@@ -82,7 +82,7 @@ class GameController extends ChangeNotifier {
 
   /// Devuelve: 'pared' | 'bloqueada' | 'avanzar' | 'salida'
   String moverHacia(int direccion) {
-    const deltas = {1: [-1, 0], 2: [1, 0], 3: [0, -1], 4: [0, 1]};
+    const deltas = {1: [-1, 0], 2: [1, 0], 3:[0, -1], 4: [0, 1]};
     final d = deltas[direccion];
     if (d == null) return 'bloqueada';
 
