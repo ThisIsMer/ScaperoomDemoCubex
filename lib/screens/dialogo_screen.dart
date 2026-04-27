@@ -9,32 +9,32 @@ class _DialogEntry {
 
 const _dialogo = [
   _DialogEntry(
-    'Despiertas en una oscuridad espesa, solo, con la sensación de que este lugar no se parece a nada que recuerdes.',
+    'Despiertas solo en una sala oscura.',
     nuevoFondo: 'assets/images/PortadaSinTexto.png',
   ),
-  _DialogEntry('No sabes cómo has llegado aquí, ni siquiera podrías decir si estás bajo tierra, en un edificio abandonado o en algún lugar completamente distinto.'),
-  _DialogEntry('A tu alrededor apenas distingues tres cosas: unos monitores parpadeando al fondo, un trozo de papel sobre la mesa con un lápiz al lado y varias puertas que parecen ser la única salida de la habitación.'),
-  
   _DialogEntry(
-    'Te acercas a los monitores y, al encenderlos, aparece ante ti la interfaz de lo que parecen ser cámaras de vigilancia repartidas por distintas salas.',
+    'Ves monitores, una hoja y varias puertas.',
+  ),
+  _DialogEntry(
+    'Las cámaras enseñan otras salas. Te servirán para orientarte.',
     nuevoFondo: 'assets/images/FondoCamaras.png',
   ),
-  _DialogEntry('Si prestas atención, quizá esas imágenes puedan servirte para orientarte o para anticipar lo que te espera ahí fuera.'),
-
   _DialogEntry(
-    'Aprovechas la hoja de papel y el lápiz que encuentras junto a ella para empezar a dibujar un pequeño mapa de lo que alcanzas a ver.',
+    'Con el papel puedes ir trazando un mapa.',
     nuevoFondo: 'assets/images/MapaTuto.png',
   ),
-  _DialogEntry('Todavía no sabes qué se oculta más allá de estas cuatro paredes, pero conforme vayas descubriendo nuevos rincones podrás ir añadiéndolos a tu improvisado croquis.'),
-
-  _DialogEntry('De pronto, un ruido lejano, metálico y arrastrado, resuena en el silencio; sea lo que sea, se acerca, y más vale que te des prisa.',
+  _DialogEntry(
+    'A lo lejos se oye algo arrastrarse.',
     nuevoFondo: 'assets/images/PortadaSinTexto.png',
   ),
-  _DialogEntry('No tienes tiempo que perder: en cuanto salgas de la sala de control no podrás volver, así que lo que no recuerdes ahora se perderá contigo ahí fuera.')
+  _DialogEntry(
+    'Cuando salgas de la sala de control, ya no podrás volver. Memoriza lo necesario y muévete.',
+  ),
 ];
 
 class DialogoScreen extends StatefulWidget {
   const DialogoScreen({super.key});
+
   @override
   State<DialogoScreen> createState() => _DialogoScreenState();
 }
@@ -51,7 +51,7 @@ class _DialogoScreenState extends State<DialogoScreen>
     super.initState();
     _fadeCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 500),
       value: 1.0,
     );
     _fadeAnim = _fadeCtrl.drive(Tween(begin: 0.0, end: 1.0));
@@ -69,9 +69,12 @@ class _DialogoScreenState extends State<DialogoScreen>
       Navigator.pushReplacementNamed(context, '/menu');
       return;
     }
+
     final siguiente = _dialogo[_idx + 1];
+
     if (siguiente.nuevoFondo != null) {
       _fadeCtrl.reverse().then((_) {
+        if (!mounted) return;
         setState(() {
           _idx++;
           _fondoActual = siguiente.nuevoFondo;
@@ -86,6 +89,7 @@ class _DialogoScreenState extends State<DialogoScreen>
   @override
   Widget build(BuildContext context) {
     final entrada = _dialogo[_idx];
+
     return Scaffold(
       body: GestureDetector(
         onTap: _avanzar,
@@ -100,11 +104,13 @@ class _DialogoScreenState extends State<DialogoScreen>
                   : Container(color: Colors.black87),
             ),
             Positioned(
-              left: 32, right: 32, bottom: 40,
+              left: 28,
+              right: 28,
+              bottom: 34,
               child: Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
+                  color: Colors.black.withOpacity(0.78),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white24),
                 ),
@@ -128,9 +134,11 @@ class _DialogoScreenState extends State<DialogoScreen>
                     Text(
                       entrada.texto,
                       style: const TextStyle(
-                          color: Colors.white, fontSize: 20, height: 1.5),
+                        color: Colors.white,
+                        fontSize: 18,
+                        height: 1.45,
+                      ),
                     ),
-                    const SizedBox(height: 12),
                   ],
                 ),
               ),
