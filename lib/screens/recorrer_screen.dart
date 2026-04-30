@@ -80,7 +80,6 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
       _mensajePrincipal = principal;
       _mensajeCreatura = creatura;
     });
-
     _mensajeTimer = Timer(Duration(seconds: segundos), () {
       if (!mounted) return;
       setState(() {
@@ -94,73 +93,83 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
     if (_bloqueado || _mostrandoIntro) return;
 
     final gc = context.read<GameController>();
+
+    final estadoDecision = gc.moverMonstruoDecision();
+
+    if (estadoDecision == EstadoMonstruo.encuentro) {
+      _activarEncuentroMonstruo();
+      return;
+    }
+
+    final bool cercaDecision = estadoDecision == EstadoMonstruo.cerca;
+
     final estado = gc.clasificarDireccion(dir);
 
+    if (estado == 'pared') {
+      final resultado = gc.moverHacia(dir);
+      await _procesarResultado(context, resultado,
+          monstruoCercaExtra: cercaDecision);
+      return;
+    }
+
     if (estado == 'puerta_bloqueada') {
-      await _gestionarPuertaBloqueada(context, dir);
+      await _gestionarPuertaBloqueada(context, dir,
+          monstruoCercaExtra: cercaDecision);
       return;
     }
 
     final resultado = gc.moverHacia(dir);
-    await _procesarResultado(context, resultado);
+    await _procesarResultado(context, resultado,
+        monstruoCercaExtra: cercaDecision);
   }
 
-  Future<void> _gestionarPuertaBloqueada(BuildContext context, int dir) async {
+  Future<void> _gestionarPuertaBloqueada(
+      BuildContext context,
+      int dir, {
+        bool monstruoCercaExtra = false,
+      }) async {
     final gc = context.read<GameController>();
 
+    // ── Sin intentos restantes ───────────────────────────────
     if (gc.intentosForzarRestantes <= 0) {
       await showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: const Text(
-            'Puerta bloqueada',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            'No te quedan intentos para forzar cerraduras.',
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Seguir'),
+        builder: (ctx) => _DialogJuego(
+          titulo: 'PUERTA BLOQUEADA',
+          cuerpo: 'No te quedan intentos\npara forzar cerraduras.',
+          acciones: [
+            _BotonDialog(
+              texto: 'SEGUIR',
+              onTap: () => Navigator.pop(ctx),
             ),
           ],
         ),
       );
-
       if (!mounted) return;
       final resultado = gc.rechazarPuerta(dir);
-      await _procesarResultado(context, resultado);
+      await _procesarResultado(context, resultado,
+          monstruoCercaExtra: monstruoCercaExtra);
       return;
     }
 
+    // ── Preguntar si forzar ──────────────────────────────────
     final usarFuerza = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          'Puerta bloqueada',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          '¿Quieres intentar forzarla?\n\n'
-              'Probabilidad actual: ${gc.probabilidadActualForzar}%\n'
-              'Intentos restantes: ${gc.intentosForzarRestantes}',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+      builder: (ctx) => _DialogJuego(
+        titulo: 'PUERTA BLOQUEADA',
+        cuerpo:
+        '¿Intentas forzarla?\n\nProbabilidad: ${gc.probabilidadActualForzar}%\n'
+            'Intentos restantes: ${gc.intentosForzarRestantes}',
+        acciones: [
+          _BotonDialog(
+            texto: 'NO',
+            onTap: () => Navigator.pop(ctx, false),
+            tenue: true,
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Sí',
-              style: TextStyle(color: Colors.amberAccent),
-            ),
+          _BotonDialog(
+            texto: 'SÍ',
+            onTap: () => Navigator.pop(ctx, true),
+            destacado: true,
           ),
         ],
       ),
@@ -170,7 +179,8 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
 
     if (usarFuerza != true) {
       final resultado = gc.rechazarPuerta(dir);
-      await _procesarResultado(context, resultado);
+      await _procesarResultado(context, resultado,
+          monstruoCercaExtra: monstruoCercaExtra);
       return;
     }
 
@@ -179,29 +189,25 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _ForzarDialog(resultado: resultado),
+      builder: (ctx) => _ForzarDialog(resultado: resultado),
     );
 
     if (!mounted) return;
-    await _procesarResultado(context, resultado);
+    await _procesarResultado(context, resultado,
+        monstruoCercaExtra: monstruoCercaExtra);
   }
 
   Future<void> _procesarResultado(
       BuildContext context,
-      MovimientoResultado resultado,
-      ) async {
+      MovimientoResultado resultado, {
+        bool monstruoCercaExtra = false,
+      }) async {
     final gc = context.read<GameController>();
 
     if (resultado.tipo == 'salida') {
-      setState(() {
-        _fondoActual = gc.tablero[gc.posAct[0]][gc.posAct[1]].fondo;
-        _fadeToBlack = true;
-      });
-
+      setState(() => _fadeToBlack = true);
       await Future.delayed(const Duration(milliseconds: 1200));
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/salida');
-      }
+      if (mounted) Navigator.pushReplacementNamed(context, '/salida');
       return;
     }
 
@@ -219,18 +225,18 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
       setState(() {
         _fondoActual = gc.tablero[gc.posAct[0]][gc.posAct[1]].fondo;
       });
-
       _mostrarMensajeTemporal(
         resultado.puertaForzada
             ? 'La cerradura cede y entras.'
             : 'Avanzas a la siguiente sala.',
-        creatura: resultado.monstruoCerca
+        creatura: (resultado.monstruoCerca || monstruoCercaExtra)
             ? 'Algo se siente amenazadoramente cerca.'
             : null,
       );
       return;
     }
 
+    // ── Error ────────────────────────────────────────────────
     final errores = gc.erroresRonda;
 
     if (errores > GameController.maxErrores) {
@@ -240,7 +246,6 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
         _mensajeCreatura = null;
         _expulsado = true;
       });
-
       await Future.delayed(const Duration(seconds: 5));
       if (mounted) {
         gc.resetRecorrido();
@@ -250,14 +255,16 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
     }
 
     final textoMovimiento = resultado.tipo == 'pared'
-        ? 'Es una pared.'
+        ? 'No hay paso: ahí termina el edificio.'
         : 'La puerta no cede.';
 
     final idx = (errores - 1).clamp(0, _mensajesCreatura.length - 1);
 
     _mostrarMensajeTemporal(
       textoMovimiento,
-      creatura: _mensajesCreatura[idx],
+      creatura: monstruoCercaExtra
+          ? 'Algo se siente amenazadoramente cerca.'
+          : _mensajesCreatura[idx],
       segundos: 4,
     );
   }
@@ -288,7 +295,6 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
         _encuentroMonstruo = false;
         _atacado = true;
       });
-
       await Future.delayed(const Duration(seconds: 4));
       if (!mounted) return;
       context.read<GameController>().resetRecorrido();
@@ -298,18 +304,14 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
 
   void _golpearMonstruo() {
     if (!_encuentroMonstruo) return;
-
     _encuentroTimer?.cancel();
     context.read<GameController>().ahuyentarMonstruo();
-
     setState(() {
       _encuentroMonstruo = false;
       _monstruoOpacity = 0.0;
     });
-
     _mostrarMensajeTemporal(
-      'Consigues apartarlo a tiempo.',
-      creatura: null,
+      'Consigues apartarlo. Tiene miedo ahora.',
       segundos: 2,
     );
   }
@@ -319,36 +321,25 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
 
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          '¿Volver?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Tendrás que recorrerlo otra vez desde el inicio.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
+      builder: (ctx) => _DialogJuego(
+        titulo: '¿VOLVER?',
+        cuerpo: 'Tendrás que recorrerlo\notra vez desde el inicio.',
+        acciones: [
+          _BotonDialog(
+            texto: 'CANCELAR',
+            onTap: () => Navigator.pop(ctx, false),
+            tenue: true,
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Volver',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+          _BotonDialog(
+            texto: 'VOLVER',
+            onTap: () => Navigator.pop(ctx, true),
+            peligro: true,
           ),
         ],
       ),
     );
 
-    if (confirmar == true) {
-      context.read<GameController>().resetRecorrido();
-    }
-
+    if (confirmar == true) context.read<GameController>().resetRecorrido();
     return confirmar ?? false;
   }
 
@@ -367,6 +358,8 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
         body: Stack(
           fit: StackFit.expand,
           children: [
+
+            // ── Fondo con crossfade ──────────────────────────
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 500),
               transitionBuilder: (child, animation) =>
@@ -384,28 +377,37 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
 
             Column(
               children: [
+
+                // ── Barra superior ───────────────────────────
                 Container(
                   color: Colors.black54,
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
                       TextButton.icon(
                         onPressed: () async {
                           final salir = await _onWillPop(context);
-                          if (salir && context.mounted) Navigator.pop(context);
+                          if (salir && context.mounted) {
+                            Navigator.pop(context);
+                          }
                         },
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white70,
-                        ),
-                        label: const Text(
-                          'VOLVER',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            letterSpacing: 2,
-                          ),
-                        ),
+                        icon: const Icon(Icons.arrow_back,
+                            color: Colors.white70),
+                        label: const Text('VOLVER',
+                            style: TextStyle(
+                                color: Colors.white70, letterSpacing: 2)),
+                      ),
+                      TextButton.icon(
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/mapa'),
+                        icon: const Icon(Icons.map_outlined,
+                            color: Colors.white38, size: 18),
+                        label: const Text('MAPA',
+                            style: TextStyle(
+                                color: Colors.white38,
+                                letterSpacing: 2,
+                                fontSize: 12)),
                       ),
                       const Spacer(),
                       _ForceIndicator(
@@ -421,6 +423,7 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
                     ],
                   ),
                 ),
+
                 Expanded(
                   child: _mostrandoIntro
                       ? _IntroDialog(texto: _intro[_introIdx])
@@ -442,6 +445,7 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
                 ),
               ),
 
+            // ── Encuentro con el monstruo ────────────────────
             if (_encuentroMonstruo)
               Positioned.fill(
                 child: Container(
@@ -479,6 +483,7 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
                 ),
               ),
 
+            // ── Fade negro ───────────────────────────────────
             IgnorePointer(
               child: AnimatedOpacity(
                 opacity: _fadeToBlack ? 1.0 : 0.0,
@@ -509,14 +514,132 @@ class _RecorrerScreenState extends State<RecorrerScreen> {
   }
 }
 
+// ── Dialog con estilo de juego ───────────────────────────────
+
+class _DialogJuego extends StatelessWidget {
+  final String titulo;
+  final String cuerpo;
+  final List<Widget> acciones;
+
+  const _DialogJuego({
+    required this.titulo,
+    required this.cuerpo,
+    required this.acciones,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.93),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                    width: 3,
+                    height: 16,
+                    color: Colors.white24,
+                    margin: const EdgeInsets.only(right: 10)),
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            const Divider(color: Colors.white12, height: 1),
+            const SizedBox(height: 18),
+            Text(
+              cuerpo,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: acciones
+                  .expand((w) => [w, const SizedBox(width: 8)])
+                  .toList()
+                ..removeLast(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BotonDialog extends StatelessWidget {
+  final String texto;
+  final VoidCallback onTap;
+  final bool tenue;
+  final bool destacado;
+  final bool peligro;
+
+  const _BotonDialog({
+    required this.texto,
+    required this.onTap,
+    this.tenue = false,
+    this.destacado = false,
+    this.peligro = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color color = Colors.white;
+    if (tenue) color = Colors.white38;
+    if (destacado) color = Colors.amberAccent;
+    if (peligro) color = Colors.redAccent;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: color.withOpacity(tenue ? 0.2 : 0.35),
+          ),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          texto,
+          style: TextStyle(
+            color: color,
+            fontSize: 12,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Indicador de intentos de forzar ─────────────────────────
+
 class _ForceIndicator extends StatelessWidget {
   final int usados;
   final int maximos;
 
-  const _ForceIndicator({
-    required this.usados,
-    required this.maximos,
-  });
+  const _ForceIndicator({required this.usados, required this.maximos});
 
   @override
   Widget build(BuildContext context) {
@@ -530,7 +653,8 @@ class _ForceIndicator extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 2),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(3),
-            color: usado ? Colors.amber.withOpacity(0.85) : Colors.white24,
+            color:
+            usado ? Colors.amber.withOpacity(0.85) : Colors.white24,
           ),
         );
       }),
@@ -538,14 +662,14 @@ class _ForceIndicator extends StatelessWidget {
   }
 }
 
+// ── Indicador de errores ─────────────────────────────────────
+
 class _ErrorIndicator extends StatelessWidget {
   final int errores;
   final int maxErrores;
 
-  const _ErrorIndicator({
-    required this.errores,
-    required this.maxErrores,
-  });
+  const _ErrorIndicator(
+      {required this.errores, required this.maxErrores});
 
   @override
   Widget build(BuildContext context) {
@@ -554,7 +678,6 @@ class _ErrorIndicator extends StatelessWidget {
       children: List.generate(maxErrores, (i) {
         final usado = i < errores;
         final critico = errores >= maxErrores && i == maxErrores - 1;
-
         return Container(
           width: 10,
           height: 10,
@@ -567,9 +690,8 @@ class _ErrorIndicator extends StatelessWidget {
             boxShadow: usado && critico
                 ? [
               BoxShadow(
-                color: Colors.red.withOpacity(0.6),
-                blurRadius: 6,
-              ),
+                  color: Colors.red.withOpacity(0.6),
+                  blurRadius: 6)
             ]
                 : null,
           ),
@@ -579,26 +701,19 @@ class _ErrorIndicator extends StatelessWidget {
   }
 }
 
+// ── Botón de dirección ───────────────────────────────────────
+
 class _DirButton extends StatelessWidget {
   final int direccion;
   final VoidCallback onPressed;
 
-  const _DirButton({
-    required this.direccion,
-    required this.onPressed,
-  });
+  const _DirButton({required this.direccion, required this.onPressed});
 
-  static const _datos = {
-    1: '○',
-    2: '□',
-    3: '△',
-    4: '✕',
-  };
+  static const _datos = {1: '○', 2: '□', 3: '△', 4: '✕'};
 
   @override
   Widget build(BuildContext context) {
     final simbolo = _datos[direccion] ?? '?';
-
     return GestureDetector(
       onTap: onPressed,
       child: Container(
@@ -610,19 +725,19 @@ class _DirButton extends StatelessWidget {
           color: Colors.black.withOpacity(0.90),
         ),
         child: Center(
-          child: Text(
-            simbolo,
-            style: const TextStyle(color: Colors.white, fontSize: 30),
-          ),
+          child: Text(simbolo,
+              style:
+              const TextStyle(color: Colors.white, fontSize: 30)),
         ),
       ),
     );
   }
 }
 
+// ── Intro ────────────────────────────────────────────────────
+
 class _IntroDialog extends StatelessWidget {
   final String texto;
-
   const _IntroDialog({required this.texto});
 
   @override
@@ -637,18 +752,15 @@ class _IntroDialog extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.white24),
         ),
-        child: Text(
-          texto,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            height: 1.45,
-          ),
-        ),
+        child: Text(texto,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 17, height: 1.45)),
       ),
     );
   }
 }
+
+// ── Panel de movimiento ──────────────────────────────────────
 
 class _PanelMovimiento extends StatelessWidget {
   final String? mensajePrincipal;
@@ -676,24 +788,27 @@ class _PanelMovimiento extends StatelessWidget {
               const Text(
                 '¿Hacia dónde quieres ir?',
                 style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 20,
-                  letterSpacing: 2,
-                ),
+                    color: Colors.white70,
+                    fontSize: 20,
+                    letterSpacing: 2),
               ),
               const SizedBox(height: 24),
-              _DirButton(direccion: 1, onPressed: () => onDireccion(1)),
+              _DirButton(
+                  direccion: 1, onPressed: () => onDireccion(1)),
               const SizedBox(height: _btnSize),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _DirButton(direccion: 3, onPressed: () => onDireccion(3)),
+                  _DirButton(
+                      direccion: 3, onPressed: () => onDireccion(3)),
                   const SizedBox(width: _btnSize * 2),
-                  _DirButton(direccion: 4, onPressed: () => onDireccion(4)),
+                  _DirButton(
+                      direccion: 4, onPressed: () => onDireccion(4)),
                 ],
               ),
               const SizedBox(height: _btnSize),
-              _DirButton(direccion: 2, onPressed: () => onDireccion(2)),
+              _DirButton(
+                  direccion: 2, onPressed: () => onDireccion(2)),
             ],
           ),
         ),
@@ -705,11 +820,10 @@ class _PanelMovimiento extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             child: hayMensaje
                 ? Container(
-              key: ValueKey('$mensajePrincipal$mensajeCreatura'),
+              key: ValueKey(
+                  '$mensajePrincipal$mensajeCreatura'),
               padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 14,
-              ),
+                  horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.82),
                 borderRadius: BorderRadius.circular(8),
@@ -722,14 +836,14 @@ class _PanelMovimiento extends StatelessWidget {
                   Text(
                     mensajePrincipal!,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      height: 1.4,
-                    ),
+                        color: Colors.white,
+                        fontSize: 16,
+                        height: 1.4),
                   ),
                   if (mensajeCreatura != null) ...[
                     const SizedBox(height: 10),
-                    const Divider(color: Colors.white12, height: 1),
+                    const Divider(
+                        color: Colors.white12, height: 1),
                     const SizedBox(height: 10),
                     Text(
                       mensajeCreatura!,
@@ -752,9 +866,10 @@ class _PanelMovimiento extends StatelessWidget {
   }
 }
 
+// ── Animación de dado ────────────────────────────────────────
+
 class _ForzarDialog extends StatefulWidget {
   final MovimientoResultado resultado;
-
   const _ForzarDialog({required this.resultado});
 
   @override
@@ -762,22 +877,60 @@ class _ForzarDialog extends StatefulWidget {
 }
 
 class _ForzarDialogState extends State<_ForzarDialog> {
-  bool _mostrarNumero = false;
-  bool _mostrarBoton = false;
+  Timer? _rollTimer;
+  int _caraVisible = 1;
+  bool _terminado = false;
+
+  static const _caras = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
   @override
   void initState() {
     super.initState();
+    _iniciarAnimacion();
+  }
 
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() => _mostrarNumero = true);
-    });
+  @override
+  void dispose() {
+    _rollTimer?.cancel();
+    super.dispose();
+  }
 
-    Future.delayed(const Duration(milliseconds: 1400), () {
+  void _iniciarAnimacion() {
+    final inicio = DateTime.now();
+
+    _rollTimer = Timer.periodic(
+        const Duration(milliseconds: 110), (timer) {
       if (!mounted) return;
-      setState(() => _mostrarBoton = true);
+
+      final ms = DateTime.now().difference(inicio).inMilliseconds;
+      if (ms >= 3000) {
+        _mostrarResultadoFinal();
+        return;
+      }
+
+      setState(() {
+        _caraVisible =
+            (DateTime.now().microsecondsSinceEpoch % 6) + 1;
+      });
     });
+  }
+
+  void _mostrarResultadoFinal() {
+    _rollTimer?.cancel();
+    if (!mounted) return;
+
+    final tirada = widget.resultado.tirada ?? 1;
+    final caraFinal = ((tirada - 1) % 6) + 1;
+
+    setState(() {
+      _caraVisible = caraFinal;
+      _terminado = true;
+    });
+  }
+
+  void _saltar() {
+    if (_terminado) return;
+    _mostrarResultadoFinal();
   }
 
   @override
@@ -785,47 +938,109 @@ class _ForzarDialogState extends State<_ForzarDialog> {
     final exito = widget.resultado.puertaForzada;
     final prob = widget.resultado.probabilidad ?? 0;
     final tirada = widget.resultado.tirada ?? 0;
+    final caraStr = _caras[(_caraVisible - 1).clamp(0, 5)];
+    final colorResultado =
+    exito ? Colors.greenAccent : Colors.redAccent;
 
-    return AlertDialog(
-      backgroundColor: Colors.grey[900],
-      title: Text(
-        exito ? 'La cerradura cede' : 'La cerradura resiste',
-        style: const TextStyle(color: Colors.white),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.casino, color: Colors.amberAccent, size: 42),
-          const SizedBox(height: 12),
-          Text(
-            'Probabilidad: $prob%',
-            style: const TextStyle(color: Colors.white70),
+    return GestureDetector(
+      onTap: _saltar,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.93),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.white12),
           ),
-          const SizedBox(height: 8),
-          AnimatedOpacity(
-            opacity: _mostrarNumero ? 1 : 0,
-            duration: const Duration(milliseconds: 250),
-            child: Text(
-              'Tirada: $tirada',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                      width: 3,
+                      height: 16,
+                      color: _terminado
+                          ? colorResultado.withOpacity(0.6)
+                          : Colors.white24,
+                      margin: const EdgeInsets.only(right: 10)),
+                  Text(
+                    _terminado
+                        ? (exito
+                        ? 'CERRADURA FORZADA'
+                        : 'CERRADURA INTACTA')
+                        : 'FORZANDO CERRADURA',
+                    style: TextStyle(
+                      color:
+                      _terminado ? colorResultado : Colors.white,
+                      fontSize: 13,
+                      letterSpacing: 3,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 18),
+              const Divider(color: Colors.white12, height: 1),
+              const SizedBox(height: 24),
+              AnimatedScale(
+                scale: _terminado ? 1.0 : 1.06,
+                duration: const Duration(milliseconds: 110),
+                child: Text(
+                  caraStr,
+                  style: TextStyle(
+                    fontSize: 72,
+                    color: _terminado ? colorResultado : Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Probabilidad: $prob%',
+                style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 12,
+                    letterSpacing: 1),
+              ),
+              const SizedBox(height: 8),
+              if (_terminado)
+                Text(
+                  '${exito ? "ÉXITO" : "FALLIDO"}',
+                  style: TextStyle(
+                    color: colorResultado,
+                    fontSize: 14,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              else
+                const Text(
+                  'TOCA PARA SALTAR',
+                  style: TextStyle(
+                      color: Colors.white24,
+                      fontSize: 11,
+                      letterSpacing: 2),
+                ),
+              const SizedBox(height: 24),
+              if (_terminado)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _BotonDialog(
+                    texto: 'CONTINUAR',
+                    onTap: () => Navigator.pop(context),
+                    destacado: exito,
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
-      actions: [
-        if (_mostrarBoton)
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Continuar'),
-          ),
-      ],
     );
   }
 }
+
+// ── Silueta del monstruo ─────────────────────────────────────
 
 class _MonsterSilhouette extends StatelessWidget {
   const _MonsterSilhouette();
@@ -833,58 +1048,74 @@ class _MonsterSilhouette extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 170,
-      height: 220,
+      width: 220,
+      height: 340,
       child: Stack(
         alignment: Alignment.center,
         children: [
+          // Halo rojo difuso detrás
           Container(
-            width: 150,
-            height: 200,
+            width: 220,
+            height: 340,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(90),
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.withOpacity(0.18),
-                  blurRadius: 26,
-                  spreadRadius: 6,
+                  color: Colors.black45.withOpacity(0.22),
+                  blurRadius: 40,
+                  spreadRadius: 10,
                 ),
               ],
             ),
           ),
-          Positioned(
-            top: 78,
-            left: 50,
-            child: Container(
-              width: 18,
-              height: 10,
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(10),
+
+          // Imagen principal
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/images/chica_cubex.png',
+              width: 220,
+              height: 340,
+              fit: BoxFit.cover,
+            ),
+          ),
+
+          // Viñeta oscura en los bordes para integrarlo con el fondo
+          Container(
+            width: 220,
+            height: 340,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.25),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.55),
+                ],
+                stops: const [0.0, 0.15, 0.7, 1.0],
               ),
             ),
           ),
+
+          // Texto "AHUYENTAR" en la parte inferior
           Positioned(
-            top: 78,
-            right: 50,
-            child: Container(
-              width: 18,
-              height: 10,
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 8,
+            bottom: 10,
             child: Text(
-              'TÓCALO',
+              'AHUYENTAR',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.9),
                 letterSpacing: 3,
                 fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withOpacity(0.8),
+                    blurRadius: 8,
+                  ),
+                ],
               ),
             ),
           ),
@@ -893,6 +1124,8 @@ class _MonsterSilhouette extends StatelessWidget {
     );
   }
 }
+
+// ── Overlay de huida ─────────────────────────────────────────
 
 class _HuidaOverlay extends StatelessWidget {
   final String titulo;
@@ -948,7 +1181,8 @@ class _HuidaOverlay extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(width: 24, height: 1, color: Colors.white12),
+                    Container(
+                        width: 24, height: 1, color: Colors.white12),
                     const SizedBox(width: 12),
                     Text(
                       subtitulo,
@@ -960,7 +1194,8 @@ class _HuidaOverlay extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Container(width: 24, height: 1, color: Colors.white12),
+                    Container(
+                        width: 24, height: 1, color: Colors.white12),
                   ],
                 ),
               ],
